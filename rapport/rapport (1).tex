@@ -1,0 +1,416 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx,booktabs,array,amsmath,amssymb,xcolor,float,caption,url}
+\usepackage[colorlinks=true,linkcolor=black,urlcolor=red!70!black,citecolor=black]{hyperref}
+\graphicspath{{figures/}{./}}
+\captionsetup{font=small,labelfont=bf,labelsep=colon}
+\addto\captionsfrench{\def\tablename{Tableau}\def\figurename{Figure}}
+\setlength{\parindent}{0pt}\setlength{\parskip}{5pt}
+\renewcommand{\arraystretch}{1.15}
+\newcommand{\todo}[1]{\textcolor{red}{\textit{[À compléter : #1]}}}
+\newcommand{\pib}{\pi}
+
+\begin{document}
+\pagenumbering{gobble}
+% ------------------------------------------------------------ PAGE DE GARDE
+\begin{center}
+\IfFileExists{logo_encg_settat.png}{\includegraphics[width=0.5\linewidth]{logo_encg_settat.png}}{%
+\fbox{\parbox[c][3cm][c]{7cm}{\centering\small Logo de l'ENCG Settat\\\texttt{logo\_encg\_settat.png}}}}\\[0.6cm]
+Université Hassan 1\textsuperscript{er} de Settat\\
+{\large\bfseries École Nationale de Commerce et de Gestion de Settat}\\
+ENCG Settat\\[0.9cm]
+\rule{\linewidth}{0.6pt}\\[4pt]
+{\small Cours BD \& DS : examen individuel (Partie B)}\\[3pt]
+Rapport de projet de science des données appliqué à la finance\\[10pt]
+{\Large\bfseries\itshape F3 : Prévision de l'inflation américaine\\[2pt]
+\large le chômage et le taux directeur aident-ils à la prévoir ?}\\[4pt]
+\rule{\linewidth}{0.6pt}
+\end{center}
+\vspace{1.2cm}
+\noindent
+\begin{minipage}[b]{0.68\linewidth}
+\begin{tabular}{@{}ll}
+Réalisé par & \textit{Hafsa TAMIR}\\
+Code Apogée & \textit{i23009241}\\
+Groupe et filière & \textit{G3}, S7 \todo{FIN }\\
+Algorithme principal & \textit{1 : régression linéaire}\\
+Enseignant(e) & \todo{Abderrahim Larhlimi}\\
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[b]{0.26\linewidth}
+\IfFileExists{photo_etudiant.jpg}{\fbox{\includegraphics[width=\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax]{photo_etudiant.jpg}}}{%
+\fbox{\parbox[c][4.2cm][c]{0.9\linewidth}{\centering\small\textcolor{red}{\textit{Photo de l'étudiant(e)}}\\\texttt{\scriptsize photo\_etudiant.jpg}}}}
+\end{minipage}
+
+\vspace{1.2cm}
+\begin{center}
+\textbf{Dépôt GitHub :} \todo{https://github.com/tamir-hafsaencg-cyber/23009241-g3fin}\\[1.8cm]
+Année universitaire 2026-2027\\
+{\small Remis le 24 novembre 2026}
+\end{center}
+\newpage
+\pagenumbering{arabic}
+
+% ------------------------------------------------------------ 1 INTRODUCTION
+\section{Introduction}
+\textbf{Contexte.} L'inflation américaine conditionne les décisions de la Réserve fédérale, les taux d'intérêt réels, la valorisation des obligations et des actions, ainsi que les anticipations de salaires et de prix des entreprises. Un gérant de portefeuille ou un trésorier d'entreprise qui anticipe mieux l'inflation à quelques mois peut ajuster la duration de son portefeuille obligataire, la part d'actifs indexés ou la couverture de ses coûts.
+
+\textbf{Problématique.} Le taux de chômage et le taux directeur, ajoutés à l'inflation passée, permettent-ils de prévoir l'inflation américaine à 1, 3 et 12 mois mieux qu'une règle naïve, sur la période 2010-2026 ?
+
+\textbf{Objectif mesurable.} Métrique principale : erreur absolue moyenne (MAE), en points de pourcentage d'inflation. Référence naïve : l'inflation future est égale à l'inflation du dernier mois connu ($\hat\pi_{t+h}=\pi_t$). Période de test : de janvier 2010 à septembre 2026, en marche avant. Seuil de réussite : un ratio MAE du modèle / MAE du naïf strictement inférieur à 1, critère énoncé dans la démarche du notebook avant l'exécution des modèles (« battre le naïf »). Ce seuil est binaire, sans marge minimale.
+
+\textbf{Nature du problème.} Régression supervisée sur série temporelle : la cible est une grandeur continue (la variation future du taux d'inflation) et l'ordre chronologique des observations doit être respecté.
+
+\textbf{Organisation du rapport.} La section 2 présente l'état de l'art et la section 3 les travaux liés. Les sections 4 à 8 décrivent les données, leur exploration, leur préparation, l'algorithme retenu et le protocole expérimental. La section 9 présente les résultats, discutés en section 10, avant la conclusion (section 11).
+
+% ------------------------------------------------------------ 2 ETAT DE L'ART
+\section{État de l'art}
+Prévoir l'inflation est une tâche réputée difficile : la littérature conclut depuis longtemps qu'il est très difficile d'améliorer des modèles simples (dernière valeur, moyenne des valeurs récentes, modèle autorégressif, modèle univarié à composantes inobservables) à l'aide de variables macroéconomiques supplémentaires, courbe de Phillips comprise [2], [3], [7]. Des travaux plus récents, fondés sur des centaines de prédicteurs et des méthodes d'apprentissage automatique, réintroduisent des gains, surtout avec les forêts aléatoires [4]. Le tableau~\ref{tab:etat} résume ces trois familles d'approches.
+
+\begin{table}[H]\centering\small
+\caption{Panorama des approches pour la prévision de l'inflation}\label{tab:etat}
+\begin{tabular}{@{}p{2.5cm}p{3.5cm}p{3.2cm}p{3.6cm}c@{}}
+\toprule
+Approche & Principe & Atouts & Limites & Réf.\\\midrule
+Référence naïve du domaine & L'inflation future est égale à la dernière valeur connue (ou à une moyenne récente) & Aucun paramètre, aucune estimation, très robuste & Ignore toute autre information ; ne corrige pas un retour vers la moyenne & [2], [7]\\
+Approche classique & Modèle autorégressif, courbe de Phillips (chômage), modèle à composantes inobservables & Interprétable, fondée sur la théorie économique & Relation instable selon les régimes ; gains faibles par rapport au naïf & [2], [3]\\
+Apprentissage automatique & Régularisation (Ridge, Lasso), arbres, forêts, boosting, sur de nombreuses variables & Capte des non-linéarités et sélectionne les variables & Exige beaucoup de données ; risque de surapprentissage sur séries courtes & [4]\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------ 3 TRAVAUX LIES
+\section{Travaux liés}
+\begin{table}[H]\centering\small
+\caption{Travaux liés}\label{tab:lies}
+\begin{tabular}{@{}p{2.3cm}p{2.7cm}p{3.1cm}p{3.2cm}p{3cm}@{}}
+\toprule
+Travail & Données & Méthode & Résultat principal & Différence avec ce travail\\\midrule
+Stock et Watson, 2007 [3] & Inflation américaine, séries macro de long terme & Modèles univariés (dont composantes inobservables) comparés à des modèles multivariés & L'inflation est devenue plus difficile à prévoir ; les modèles univariés simples sont des références solides & Ici : 3 variables seulement, test en marche avant de 2010 à 2026\\
+Atkeson et Ohanian, 2001 [7] & Inflation américaine, fin du XX\textsuperscript{e} siècle & Modèles de type courbe de Phillips contre une prévision naïve & Les modèles de Phillips ne battent pas la prévision naïve & Ici : horizons 1, 3 et 12 mois ; Ridge, Lasso, arbres et boosting en plus\\
+Medeiros et al., 2021 [4] & FRED-MD, plus de 500 variables mensuelles & Lasso, forêts aléatoires, boosting, comparés à des références univariées & Les forêts aléatoires dominent les autres modèles & Ici : 12 variables ; la forêt est le moins bon modèle\\
+\bottomrule
+\end{tabular}
+\end{table}
+\textbf{Positionnement.} Ce travail reprend la logique de ces études : le naïf est le vrai juge de paix. Il apporte un protocole sans fuite d'information (découpage chronologique, purge de $h$ mois, standardisation dans un \texttt{Pipeline}, ré-entraînement annuel) sur un test long, qui inclut le choc inflationniste de 2021-2022, et il isole la contribution du chômage et du taux directeur en comparant avec un modèle fondé sur l'inflation seule.
+
+% ------------------------------------------------------------ 4 JEU DE DONNEES
+\section{Jeu de données}
+\begin{itemize}
+\item \textbf{Nom et source :} base mensuelle « Base\_de\_donne\_\_inflation.xlsx » (inflation, chômage, taux directeur des États-Unis), issue de FRED, Réserve fédérale de Saint-Louis [1], \todo{adresse exacte du jeu et codes des trois séries}
+\item \textbf{Date d'extraction :} \todo{jj/mm/aaaa}
+\item \textbf{Licence ou conditions d'utilisation :} \todo{licence, ou « non précisée par la source »}
+\item \textbf{Taille :} 868 observations et 3 variables (plus la date), de juillet 1954 à octobre 2026, fréquence mensuelle.
+\item \textbf{Unité d'observation :} un mois calendaire.
+\item \textbf{Variable cible :} la variation de l'inflation à l'horizon $h$, $y_{t+h}=\pi_{t+h}-\pi_t$, avec $h\in\{1,3,12\}$ mois. L'inflation prévue s'obtient en ajoutant l'inflation courante $\pi_t$.
+\item \textbf{Adéquation :} la base contient l'inflation, le chômage (courbe de Phillips) et le taux directeur (politique monétaire) sur plus de 70 ans ; elle permet donc de tester directement si ces deux variables ajoutent de l'information à l'inflation passée.
+\item \textbf{Limites :} trois valeurs manquantes (octobre 2025 pour l'inflation et le chômage, octobre 2026 pour l'inflation) ; une seule version de chaque série, c'est-à-dire des valeurs révisées et non les premières publications (biais d'anticipation, [8]) ; régimes très différents (années 1970, taux proches de zéro après 2008, choc de 2021-2022) ; 2026 non terminée.
+\end{itemize}
+
+\begin{table}[H]\centering\small
+\caption{Dictionnaire des principales variables}\label{tab:dico}
+\begin{tabular}{@{}p{2.4cm}p{4.8cm}p{1.5cm}p{1cm}p{1.9cm}p{1.2cm}@{}}
+\toprule
+Variable & Description & Type & Unité & Rôle & Manquants (\%)\\\midrule
+\texttt{date} & Mois d'observation & période & mois & date & 0\\
+\texttt{infl} & Taux d'inflation $\pi_t$ & numérique & \% & base de la cible & 0,23\\
+\texttt{chom} & Taux de chômage & numérique & \% & explicative & 0,12\\
+\texttt{taux} & Taux directeur & numérique & \% & explicative & 0\\
+\texttt{y} & Variable créée : $y_{t+h}=\pi_{t+h}-\pi_t$ & numérique & points & cible & 0\\
+\texttt{infl\_l}$k$ & Créée : $\pi_{t-k}$, $k\in\{1,2,3,6,12\}$ & numérique & \% & explicative & 0\\
+\texttt{chom\_l3} & Créée : chômage retardé de 3 mois & numérique & \% & explicative & 0\\
+\texttt{d\_chom\_12} & Créée : $\text{chom}_t-\text{chom}_{t-12}$ & numérique & points & explicative & 0\\
+\texttt{d\_taux\_3}, \texttt{d\_taux\_12} & Créées : $\text{taux}_t-\text{taux}_{t-k}$, $k\in\{3,12\}$ & numérique & points & explicative & 0\\
+\bottomrule
+\end{tabular}
+\end{table}
+{\small Les pourcentages de valeurs manquantes sont calculés sur les 868 mois de la base brute (2 mois pour l'inflation, 1 pour le chômage) ; après report de la dernière valeur connue, les variables explicatives n'ont plus de valeur manquante.}
+
+% ------------------------------------------------------------ 5 EXPLORATION
+\section{Exploration}
+\textbf{Statistiques descriptives.} Le tableau~\ref{tab:desc} donne les statistiques des trois séries. L'inflation moyenne est de 3,57\,\% avec un écart-type de 2,76 points ; elle atteint 14,59\,\% au maximum et $-1{,}96$\,\% au minimum. Surtout, l'inflation est extrêmement persistante : son autocorrélation vaut 0,991 à un mois et 0,734 à douze mois. La valeur d'un mois explique donc presque entièrement celle du mois suivant, ce qui fait du naïf une référence très exigeante.
+
+\begin{table}[H]\centering\small
+\caption{Statistiques descriptives des séries mensuelles (juillet 1954 à octobre 2026)}\label{tab:desc}
+\begin{tabular}{@{}lrrrrrrrr@{}}
+\toprule
+Série (\%) & $n$ & Moyenne & Éc.-type & Min & Q1 & Médiane & Q3 & Max\\\midrule
+Inflation & 866 & 3,57 & 2,76 & $-1{,}96$ & 1,73 & 2,94 & 4,37 & 14,59\\
+Chômage & 867 & 5,79 & 1,67 & 3,40 & 4,40 & 5,50 & 6,85 & 14,80\\
+Taux directeur & 868 & 4,59 & 3,52 & 0,05 & 1,94 & 4,24 & 6,10 & 19,10\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Qualité des données.} Aucun mois n'est manquant dans le calendrier (vérifié par une assertion dans le notebook). Trois valeurs sont absentes : l'inflation et le chômage d'octobre 2025, et l'inflation d'octobre 2026, mois non encore publié. Décision : les variables explicatives sont complétées par \emph{report de la dernière valeur connue}, jamais par interpolation, car une interpolation utiliserait la valeur suivante, donc le futur ; la cible n'est jamais inventée et la série est coupée à la dernière inflation connue (septembre 2026). Les valeurs extrêmes sont conservées : le pic de chômage de 2020 (14,8\,\%) et les sommets d'inflation et de taux de 1980-1981 sont des événements réels, et en finance une valeur extrême est souvent réelle.
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.92\linewidth]{fig1_series.png}
+\caption{Inflation, chômage et taux directeur mensuels (trait rouge : début de la période de test)}\label{fig:series}
+\end{figure}
+\textbf{Lecture de la figure~\ref{fig:series}.} Trois régimes se distinguent : la grande inflation des années 1970 et du début des années 1980 (avec des taux directeurs jusqu'à 19\,\%), la période calme de 1990 à 2008, puis des taux proches de zéro après 2008 et en 2020-2021. Le test commence en 2010 et contient donc deux contextes très différents : une inflation basse et stable, puis le choc de 2021-2022. Les relations apprises avant 2010 peuvent ne pas tenir après.
+
+% ------------------------------------------------------------ 6 PREPARATION
+\section{Préparation}
+\begin{itemize}
+\item \textbf{Nettoyage :} report de la dernière valeur connue pour les variables explicatives (aucune interpolation) ; troncature de la série à septembre 2026, dernière date où l'inflation est connue ; aucune valeur extrême supprimée.
+\item \textbf{Variables créées :} 12 variables à la date d'origine $t$, construites avec le passé seulement : inflation courante et retardée de 1, 2, 3, 6 et 12 mois ; chômage courant, chômage retardé de 3 mois, variation annuelle du chômage ; taux directeur courant, variations sur 3 et 12 mois (formules dans le tableau~\ref{tab:dico}).
+\item \textbf{Encodage et mise à l'échelle :} aucune variable catégorielle, donc pas d'encodage. Une standardisation (\texttt{StandardScaler}) est appliquée à l'intérieur d'un \texttt{Pipeline} pour les modèles linéaires, Ridge et Lasso, afin de comparer les coefficients ; elle est inutile pour les arbres.
+\end{itemize}
+
+\textbf{Prévention des fuites.}\\
+$\boxtimes$ Transformations ajustées sur l'apprentissage seulement, dans un \texttt{Pipeline}.\\
+$\boxtimes$ Découpage chronologique, sans mélange (données datées).\\
+$\boxtimes$ Variables construites avec le passé seulement ; écart de $h$ observations (purge) puisque la cible porte sur l'horizon $h$.\\
+$\boxtimes$ Aucune variable ne contient la cible : la cible est $\pi_{t+h}-\pi_t$ et aucune variable n'utilise une date postérieure à $t$.\\
+$\square$ Jeu de test utilisé une seule fois, à la fin. \emph{Non respecté strictement} : les hyperparamètres sont choisis sans le test, mais les sept spécifications (six algorithmes et la variante « inflation seule ») sont comparées sur le même test, et le choix de l'algorithme principal en tient compte (voir section 10).
+
+\textbf{Vérification de l'alignement des dates.} Le tableau~\ref{tab:align} montre les dernières lignes du jeu supervisé pour $h=1$ : la cible d'une ligne est bien l'inflation observée le mois suivant (la dernière, 3,72\,\%, est l'inflation de septembre 2026).
+\begin{table}[H]\centering\small
+\caption{Contrôle d'alignement (dernières lignes du jeu supervisé, $h=1$)}\label{tab:align}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Date d'origine $t$ & Inflation $\pi_t$ & Inflation $\pi_{t+1}$ observée & Cible $y_{t+1}$\\\midrule
+2026-06 & 3,46 & 3,30 & $-0{,}16$\\
+2026-07 & 3,30 & 3,35 & $+0{,}05$\\
+2026-08 & 3,35 & 3,72 & $+0{,}37$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------ 7 ALGORITHME
+\section{Algorithme}
+\textbf{Choix.} Algorithme principal : \textbf{régression linéaire} (n\textsuperscript{o} 1 de l'annexe A de l'énoncé). Raisons : (i) la littérature montre que des modèles simples sont difficiles à battre pour l'inflation [2], [3], [7] ; (ii) le signal est essentiellement la persistance, de nature linéaire ; (iii) l'apprentissage ne compte qu'environ 650 observations, ce qui favorise les modèles peu flexibles ; (iv) c'est, dans ce travail, le seul des six algorithmes testés qui bat le naïf à $h=1$. Algorithme plausible écarté : la \textbf{forêt aléatoire} (n\textsuperscript{o} 6), qui domine dans [4], mais qui est ici le moins bon modèle (ratio 1,039) et dont les arbres ne peuvent pas prédire hors de la plage d'apprentissage : en cible « niveau », le ratio monte à 1,082. Les cinq autres algorithmes servent de comparaison (annexe B).
+
+\textbf{Principe.} Le modèle ajuste une combinaison linéaire des 12 variables par moindres carrés ordinaires, pour prédire la \emph{variation} de l'inflation à $h$ mois ; l'inflation prévue s'obtient en ajoutant l'inflation courante. Implémentation : \texttt{LinearRegression} de scikit-learn [5], précédée d'un \texttt{StandardScaler} dans un \texttt{Pipeline}.
+
+\textbf{Formule essentielle.}
+\begin{equation}
+\hat y_{t+h}=\beta_0+\sum_{j=1}^{p}\beta_j\,x_{j,t},\qquad \hat\pi_{t+h}=\pi_t+\hat y_{t+h},\qquad \hat\beta=\arg\min_{\beta}\sum_{i}\Big(y_i-\beta_0-\sum_{j}\beta_j x_{j,i}\Big)^2
+\end{equation}
+où $\hat y_{t+h}$ est la variation d'inflation prévue, $x_{j,t}$ la $j$-ième variable standardisée à la date $t$ ($p=12$), $\beta_0$ la constante, $\beta_j$ les coefficients, $\pi_t$ l'inflation courante et $\hat\pi_{t+h}$ l'inflation prévue.
+
+\textbf{Paramètres appris.} La constante et 12 coefficients, estimés sur l'apprentissage. La figure~\ref{fig:coef} les montre (variables standardisées, apprentissage avant 2010). Les coefficients les plus grands portent sur l'inflation retardée : environ $+0{,}8$ pour l'inflation courante contre $-0{,}8$ pour son retard d'un mois, et $+0{,}4$ contre $-0{,}4$ pour les retards 3 et 2. Ces signes opposés sur des retards voisins traduisent de la colinéarité et le fait que le modèle utilise surtout des \emph{différences} d'inflation. Tous les coefficients du chômage et du taux directeur sont inférieurs à 0,1 en valeur absolue.
+\begin{figure}[H]\centering
+\includegraphics[width=0.62\linewidth]{fig2_coefficients.png}
+\caption{Coefficients de la régression linéaire (variables standardisées, apprentissage avant 2010)}\label{fig:coef}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\caption{Hyperparamètres étudiés}\label{tab:hyper}
+\begin{tabular}{@{}p{2.6cm}p{3.7cm}p{4cm}p{2.8cm}@{}}
+\toprule
+Hyperparamètre & Rôle et effet attendu & Valeurs testées & Valeur retenue\\\midrule
+\multicolumn{4}{@{}l}{\textit{Algorithme principal : régression linéaire}}\\
+Ensemble de variables & Plus de variables : plus de flexibilité, plus de variance & 12 variables ; 6 variables d'inflation seule (variante AR) & 12 variables (spécification principale)\\\midrule
+\multicolumn{4}{@{}l}{\textit{Algorithmes de comparaison (réglés par \texttt{GridSearchCV} sur l'apprentissage avant 2010)}}\\
+Ridge : $\alpha$ & Force de la pénalité L2 & 13 valeurs de $10^{-2}$ à $10^{4}$ & 316,2\\
+Lasso : $\alpha$ & Force de la pénalité L1 & 13 valeurs de $10^{-4}$ à $1$ & 0,0215\\
+Forêt : feuille min., profondeur & Lissage des arbres & $\{3,8,15,30\}$ ; $\{4,8,\text{illimitée}\}$ & 8 ; 4\\
+Boosting : pas, itérations, feuilles & Vitesse et complexité & $\{0{,}03;0{,}08\}$ ; $\{100;250\}$ ; $\{4;8\}$ & 0,03 ; 100 ; 4\\
+XGBoost : pas, arbres, profondeur, $\lambda$ & Vitesse, complexité, régularisation L2 & $\{0{,}03;0{,}08\}$ ; $\{150;300\}$ ; $\{2;3\}$ ; $\{1;10\}$ & 0,03 ; 150 ; 2 ; 10\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------ 8 PROTOCOLE
+\section{Protocole expérimental}
+\begin{table}[H]\centering\small
+\caption{Découpage des données (horizon $h=1$)}\label{tab:split}
+\begin{tabular}{@{}p{2.7cm}p{6.6cm}c@{}}
+\toprule
+Ensemble & Période ou proportion & Observations\\\midrule
+Apprentissage initial & origines de juillet 1955 à décembre 2009 (cibles connues avant janvier 2010) & 654\\
+Validation & \texttt{TimeSeriesSplit} à 5 plis avec purge de $h$ mois, à l'intérieur de l'apprentissage initial & (sous-ensembles des 654)\\
+Test & origines de janvier 2010 à août 2026, en marche avant & 199\\
+\bottomrule
+\end{tabular}
+\end{table}
+Pour le test, chaque année $A$ de 2010 à 2026, le modèle est ré-entraîné avec toutes les cibles connues au premier mois de $A$, puis prédit les mois de $A$. Le test contient 199 observations car l'origine de septembre 2025 n'a pas de cible (inflation d'octobre 2025 manquante).
+\begin{itemize}
+\item \textbf{Référence naïve :} $\hat\pi_{t+h}=\pi_t$ ; pertinente car l'inflation est très persistante (autocorrélation 0,991) et c'est la référence de la littérature [2], [7].
+\item \textbf{Validation :} \texttt{TimeSeriesSplit}, 5 plis, avec \texttt{gap} égal à $h$ ; configurations essayées : 0 pour la régression linéaire (aucun hyperparamètre), 13 pour Ridge, 13 pour Lasso, 12 pour la forêt, 8 pour le boosting, 16 pour XGBoost.
+\item \textbf{Métrique principale :} MAE, erreur absolue moyenne en points de pourcentage d'inflation ; facile à lire et peu sensible aux rares grosses erreurs du choc de 2021-2022.
+\item \textbf{Métriques secondaires :} RMSE (en points, pénalise les grosses erreurs) et ratio MAE / MAE du naïf (inférieur à 1 : le modèle bat le naïf).
+\item \textbf{Graine aléatoire :} 42.
+\end{itemize}
+
+% ------------------------------------------------------------ 9 RESULTATS
+\section{Résultats}
+\textbf{Lecture des résultats.} À $h=1$ mois, la régression linéaire obtient une MAE de 0,272 contre 0,277 pour le naïf, soit un ratio de 0,981 (gain de 1,9\,\% en MAE) ; en RMSE, 0,355 contre 0,367 (gain de 3,3\,\%). C'est le seul algorithme à battre le naïf ; les cinq autres ont un ratio compris entre 1,020 et 1,039 (tableau~\ref{tab:res}, figure~\ref{fig:comp}). Le gain reste faible et n'a pas été soumis à un test statistique.
+
+\begin{table}[H]\centering\small
+\caption{Comparaison de la référence naïve et des modèles ($h=1$, test 2010-2026)}\label{tab:res}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+ & MAE validation & MAE test & RMSE test & MAE test / naïf\\\midrule
+Référence : règle naïve & n.d. & 0,277 & 0,367 & 1,000\\
+\textbf{Régression linéaire (principal)} & n.d. & \textbf{0,272} & \textbf{0,355} & \textbf{0,981}\\
+Lasso & n.d. & 0,283 & 0,378 & 1,020\\
+Boosting & 0,270 & 0,283 & 0,386 & 1,022\\
+Ridge & 0,268 & 0,284 & 0,377 & 1,024\\
+XGBoost & 0,274 & 0,286 & 0,386 & 1,032\\
+Forêt aléatoire & 0,268 & 0,288 & 0,391 & 1,039\\
+\midrule
+\textit{Variante : inflation seule (AR)} & n.d. & 0,257 & -- & 0,928\\
+\bottomrule
+\end{tabular}
+\end{table}
+{\small MAE de validation : validation chronologique à 5 plis sur l'apprentissage avant 2010 ; n.d. : non calculée dans le notebook pour ce modèle. Le ratio de la variante AR est calculé à partir de 0,257 / 0,277.}
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.95\linewidth]{fig3_comparaison.png}
+\caption{Inflation à $t+1$ : valeurs réelles et prévisions en marche avant, tous modèles (2019-2026)}\label{fig:comp}
+\end{figure}
+La figure~\ref{fig:comp} montre que tous les modèles reproduisent l'inflation avec un léger retard : les courbes sont presque superposées au naïf, car elles s'appuient avant tout sur l'inflation courante.
+
+\textbf{Autres horizons.} Quand l'horizon s'allonge, le naïf se dégrade (MAE de 0,607 à $h=3$ et de 1,473 à $h=12$) mais aucun modèle ne le bat (tableau~\ref{tab:horiz}, figure~\ref{fig:horiz}) : la régression linéaire passe à des ratios de 1,141 et 1,150, alors que Ridge et Lasso, qui se rapprochent du naïf à mesure que la pénalité grandit, restent à 1,011 au mieux.
+\begin{table}[H]\centering\small
+\caption{Ratio MAE / MAE du naïf selon l'horizon (inférieur à 1 : le modèle bat le naïf)}\label{tab:horiz}
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+Horizon & Naïf (MAE) & Linéaire & Ridge & Lasso & Forêt & Boosting & XGBoost\\\midrule
+$h=1$ & 0,277 & \textbf{0,981} & 1,024 & 1,020 & 1,039 & 1,022 & 1,032\\
+$h=3$ & 0,607 & 1,141 & 1,048 & 1,026 & 1,170 & 1,123 & 1,169\\
+$h=12$ & 1,473 & 1,150 & 1,018 & 1,011 & 1,116 & 1,088 & 1,057\\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=0.85\linewidth]{fig4_ratio_horizons.png}
+\caption{Ratio MAE / naïf par modèle et par horizon (tracé à partir du tableau~\ref{tab:horiz})}\label{fig:horiz}
+\end{figure}
+
+\textbf{Analyse des erreurs.} Par sous-période (tableau~\ref{tab:per}, figure~\ref{fig:per}), la régression linéaire bat le naïf en période calme (ratio 0,94 sur 2010-2019 et 0,93 depuis 2024) mais le perd pendant le choc de 2020-2023 (1,05). C'est l'accélération brutale de 2021 et la désinflation de 2022-2023 qui produisent les plus grosses erreurs : tous les modèles, de la figure~\ref{fig:comp}, suivent l'inflation avec retard. Les modèles d'arbres et de boosting n'améliorent pas la période de choc (1,08 à 1,10).
+\begin{table}[H]\centering\small
+\caption{Ratio MAE / naïf par sous-période de test ($h=1$)}\label{tab:per}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Modèle & 2010-2019 & 2020-2023 (choc) & 2024-fin\\\midrule
+Linéaire & 0,94 & 1,05 & 0,93\\
+Ridge & 0,99 & 1,07 & 1,01\\
+Lasso & 0,99 & 1,06 & 1,02\\
+Forêt & 1,02 & 1,09 & 0,98\\
+Boosting & 1,00 & 1,08 & 0,97\\
+XGBoost & 1,00 & 1,10 & 0,97\\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=0.85\linewidth]{fig5_ratio_periodes.png}
+\caption{Ratio MAE / naïf par sous-période (tracé à partir du tableau~\ref{tab:per})}\label{fig:per}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\caption{Prédictions de la régression linéaire sur des dates non utilisées pour l'apprentissage (origine : septembre 2026, inflation observée 3,72\,\%)}\label{tab:pred}
+\begin{tabular}{@{}p{2.5cm}cp{2.6cm}p{6.2cm}@{}}
+\toprule
+Observation & Prédiction & Valeur réelle & Commentaire\\\midrule
+octobre 2026 ($h=1$) & 3,84 & non disponible dans la base & Naïf : 3,72 ; les cinq autres modèles prévoient aussi 3,72\\
+décembre 2026 ($h=3$) & 3,83 & non disponible & Naïf : 3,72 ; autres modèles : de 3,56 à 3,72\\
+septembre 2027 ($h=12$) & 3,64 & non disponible & Naïf : 3,72 ; autres modèles : de 3,47 à 3,76\\
+\bottomrule
+\end{tabular}
+\end{table}
+{\small Résultats illustratifs, à lire avec l'erreur typique mesurée en test (MAE de 0,27 point à $h=1$) ; ce ne sont pas des prévisions officielles.}
+
+% ------------------------------------------------------------ 10 DISCUSSION
+\section{Discussion des résultats}
+\textbf{Réponse à l'objectif.} L'objectif fixé dans l'introduction est \textbf{atteint de justesse à $h=1$} (ratio 0,981 $<1$) et \textbf{non atteint à $h=3$ et $h=12$} (ratios de 1,141 et 1,150 pour le modèle principal ; au mieux 1,026 et 1,011 pour tous les modèles). Le critère étant binaire et sans test statistique, un gain de 0,005 point de MAE ne permet pas d'affirmer que le modèle est réellement meilleur que le naïf.
+
+\textbf{Interprétation.} L'inflation est si persistante (autocorrélation 0,991) que presque toute l'information utile est déjà dans sa dernière valeur. Le résultat clé : la variante n'utilisant que l'inflation passée obtient une MAE de 0,257 (ratio 0,928), meilleure que le modèle à 12 variables (0,272). Ajouter le chômage et le taux directeur \emph{dégrade} donc la prévision : dans ce cadre, ils n'aident pas à prévoir l'inflation, ce qui rejoint [3] et [7]. Cette comparaison a toutefois été faite sur le test : elle est exploratoire. La forêt donne la plus forte importance à la variation annuelle du taux directeur (environ 0,36, figure~\ref{fig:imp}), mais elle est le moins bon modèle hors échantillon : l'importance mesure ce que le modèle utilise sur l'apprentissage, non une capacité de prévision, et encore moins un lien de causalité.
+
+\textbf{Surapprentissage et généralisation.} Le notebook ne compare pas directement l'erreur d'apprentissage et l'erreur de test. Il mesure en revanche l'optimisme d'une validation croisée aléatoire (interdite sur une série temporelle) par rapport à la validation chronologique (tableau~\ref{tab:fuite}) : la MAE paraît inférieure de 4\,\% pour Ridge, 7\,\% pour la forêt et 9\,\% pour XGBoost, ce qui illustre la fuite d'information et le surapprentissage des modèles flexibles. La stabilité par sous-période est faible pour le modèle principal (de 0,93 à 1,05). Seule la graine 42 a été utilisée : la sensibilité à la graine n'a pas été étudiée.
+\begin{table}[H]\centering\small
+\caption{MAE en validation croisée aléatoire (avec fuite) et chronologique, apprentissage avant 2010}\label{tab:fuite}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Modèle & MAE validation aléatoire (fuite) & MAE validation chronologique\\\midrule
+Ridge & 0,257 & 0,268\\
+Forêt & 0,250 & 0,268\\
+XGBoost & 0,249 & 0,274\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Comparaison avec les travaux liés.} Les résultats confirment [3] et [7] : le naïf est très difficile à battre et les variables macroéconomiques n'apportent pas de gain. Ils contredisent [4], où la forêt aléatoire domine ; la différence vient probablement du nombre de prédicteurs (plus de 500 dans [4], 12 ici), de la période (une dizaine d'années de test contre 2010-2026) et de la taille de l'apprentissage, trop petite ici pour un modèle flexible.
+
+\textbf{Limites et biais.}
+\begin{itemize}
+\item \emph{Biais d'anticipation} : la base ne contient qu'une version, révisée, de chaque série ; seules des données en temps réel (vintages, [8]) permettraient de le mesurer exactement. Un test avec un bruit de révision simulé sur le chômage (écart-type 0,15 point, hypothèse arbitraire) ne modifie pas la MAE à trois décimales pour les quatre modèles testés. Cela montre que les modèles s'appuient peu sur le chômage, mais ne prouve pas leur robustesse aux révisions.
+\item \emph{Biais de sélection} : l'algorithme principal a été choisi après avoir observé les résultats de test ; la variante « inflation seule » aussi.
+\item L'inflation étant exprimée en glissement annuel, deux mois consécutifs partagent 11 mois sur 12 : la persistance est en partie mécanique, ce qui avantage le naïf à $h=1$.
+\item Trois prédicteurs seulement, un seul découpage, une seule graine, pas de test de Diebold-Mariano ; l'inflation d'octobre 2025, absente, est reportée dans les variables explicatives.
+\item Période couverte : régimes très différents, dont un choc (2021-2022) qui n'a pas d'équivalent dans l'apprentissage récent.
+\end{itemize}
+
+\textbf{Pistes d'amélioration.} (1) Utiliser des données en temps réel (vintages ALFRED) pour mesurer et supprimer le biais d'anticipation. (2) Ajouter des variables plus informatives (prix de l'énergie, anticipations d'inflation) et combiner les prévisions (par exemple moyenne du naïf et du modèle autorégressif), avec des intervalles de prévision et un test de Diebold-Mariano pour juger si les gains sont significatifs.
+
+% ------------------------------------------------------------ 11 CONCLUSION
+\section{Conclusion}
+Le chômage et le taux directeur n'aident pas à prévoir l'inflation américaine dans ce cadre : à 1 mois, la régression linéaire à 12 variables bat à peine le naïf (MAE de 0,272 contre 0,277, ratio 0,981), le modèle fondé sur l'inflation seule fait mieux (0,257, ratio 0,928), et à 3 et 12 mois aucun des six algorithmes ne bat le naïf (ratios d'au moins 1,011). Le travail apporte un protocole chronologique sans fuite sur 2010-2026 et une preuve chiffrée que la complexité (arbres, boosting) ne paie pas sur un échantillon de cette taille. Perspective : refaire l'étude avec des données en temps réel et davantage de prédicteurs, afin de vérifier si la forêt aléatoire retrouve son avantage comme dans [4].
+
+% ------------------------------------------------------------ REFERENCES
+\section*{Références et citations}
+\begin{description}\setlength{\itemsep}{2pt}
+\item[{[1]}] Federal Reserve Bank of St. Louis, FRED Economic Data (inflation, taux de chômage, taux des fonds fédéraux), \url{https://fred.stlouisfed.org}, \todo{URL exacte de chaque série et date de consultation}.
+\item[{[2]}] J. H. Faust et J. H. Wright, « Forecasting Inflation », \textit{Handbook of Economic Forecasting}, vol. 2A, Elsevier, 2013.
+\item[{[3]}] J. H. Stock et M. W. Watson, « Why Has U.S. Inflation Become Harder to Forecast? », \textit{Journal of Money, Credit and Banking}, vol. 39, suppl. 1, p. 3-33, 2007.
+\item[{[4]}] M. C. Medeiros, G. F. R. Vasconcelos, Á. Veiga et E. Zilberman, « Forecasting Inflation in a Data-Rich Environment: The Benefits of Machine Learning Methods », \textit{Journal of Business \& Economic Statistics}, vol. 39, n\textsuperscript{o} 1, p. 98-119, 2021, \url{https://doi.org/10.1080/07350015.2019.1637745}.
+\item[{[5]}] F. Pedregosa et al., « Scikit-learn : Machine Learning in Python », \textit{Journal of Machine Learning Research}, vol. 12, p. 2825-2830, 2011.
+\item[{[6]}] Support du cours BD \& DS, notebook Tp\_ML.ipynb, ENCG-2026.
+\item[{[7]}] A. Atkeson et L. E. Ohanian, « Are Phillips Curves Useful for Forecasting Inflation? », \textit{Federal Reserve Bank of Minneapolis Quarterly Review}, vol. 25, n\textsuperscript{o} 1, p. 2-11, 2001.
+\item[{[8]}] D. Croushore et T. Stark, « A real-time data set for macroeconomists », \textit{Journal of Econometrics}, vol. 105, n\textsuperscript{o} 1, p. 111-130, 2001.
+\end{description}
+
+% ------------------------------------------------------------ ANNEXES
+\appendix
+\section{Reproduction}
+Version corrigée : étiquette \texttt{remise-finale} du dépôt \todo{https://github.com/identifiant/CodeApogee-Nom-Groupe}.
+\begin{enumerate}
+\item Cloner le dépôt : \texttt{git clone} suivi du lien ci-dessus.
+\item Installer les dépendances : \texttt{pip install -r requirements.txt} (scikit-learn, xgboost, openpyxl, pandas, matplotlib).
+\item Placer \texttt{Base\_de\_donne\_\_inflation.xlsx} à l'emplacement attendu par le notebook, puis exécuter \texttt{notebooks/F3\_Prevision\_i23009241.ipynb} avec « Redémarrer et tout exécuter » (graine 42).
+\end{enumerate}
+
+\section{Tableaux et figures complémentaires}
+\begin{figure}[H]\centering
+\includegraphics[width=0.9\linewidth]{figB1_lineaire_vs_reel.png}
+\caption{Régression linéaire : inflation réelle et prévue à $t+1$ en marche avant (2015-2026), avec le naïf en pointillé}\label{fig:B1}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=0.55\linewidth]{figB2_ridge_alpha.png}
+\caption{Ridge : MAE de validation chronologique selon $\alpha$ ; la courbe remonte vers le naïf quand $\alpha$ devient très grand}\label{fig:B2}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=0.6\linewidth]{figB3_lasso_chemin.png}
+\caption{Chemin de régularisation du Lasso : à l'$\alpha$ retenu, seules \texttt{infl\_l2}, \texttt{d\_taux\_3} et \texttt{d\_taux\_12} sont conservées}\label{fig:B3}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=0.58\linewidth]{figB4_foret_importance.png}
+\caption{Forêt aléatoire : importance des variables (apprentissage avant 2010)}\label{fig:imp}\label{fig:B4}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=0.78\linewidth]{figB5_foret_cible.png}
+\caption{Forêt aléatoire : cible en variation contre cible en niveau (2020-2026)}\label{fig:B5}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=0.55\linewidth]{figB6_xgb_lambda.png}
+\caption{XGBoost : MAE de validation chronologique selon \texttt{reg\_lambda} (10 retenu contre 1)}\label{fig:B6}
+\end{figure}
+
+\section{Déclaration des outils d'IA}
+\begin{table}[H]\centering\small
+\caption{Ressources et outils d'IA utilisés}
+\begin{tabular}{@{}p{3cm}p{4.4cm}p{2.2cm}p{3.6cm}@{}}
+\toprule
+Outil ou ressource & Usage précis & Parties concernées & Vérification effectuée\\\midrule
+Claude (Anthropic), 24/11/2026 & Rédaction du texte du rapport à partir des résultats du notebook ; mise en forme LaTeX ; tracé des figures 4 et 5 à partir des tableaux du notebook & Toutes les sections & \todo{relecture et vérification de chaque chiffre contre le notebook}\\
+\bottomrule
+\end{tabular}
+\end{table}
+\end{document}
